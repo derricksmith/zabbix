@@ -17,13 +17,21 @@
 ** along with this program; if not, write to the Free Software
 ** Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 **/
-
+session_start();
+		
 
 require_once dirname(__FILE__).'/include/classes/user/CWebUser.php';
 CWebUser::disableSessionCookie();
 
 require_once dirname(__FILE__).'/include/config.inc.php';
 require_once dirname(__FILE__).'/include/forms.inc.php';
+
+
+require_once dirname(__FILE__).'/include/classes/saml/_toolkit_loader.php';
+require_once dirname(__FILE__).'/include/classes/saml/settings.php';
+
+	
+
 
 $page['title'] = _('ZABBIX');
 $page['file'] = 'index.php';
@@ -36,7 +44,11 @@ $fields = [
 	'reconnect' =>	[T_ZBX_INT, O_OPT, P_SYS|P_ACT,	BETWEEN(0, 65535), null],
 	'enter' =>		[T_ZBX_STR, O_OPT, P_SYS,	null,			null],
 	'autologin' =>	[T_ZBX_INT, O_OPT, null,	null,			null],
-	'request' =>	[T_ZBX_STR, O_OPT, null,	null,			null]
+	'request' =>	[T_ZBX_STR, O_OPT, null,	null,			null],
+	'sso_false' => 	[T_ZBX_STR, O_OPT, null,	null,			null],
+	'acs' => 		[T_ZBX_STR, O_OPT, null,	null,			null],
+	'SAMLResponse' => [T_ZBX_STR, O_OPT, null,	null,			null],
+	'RelayState' => [T_ZBX_STR, O_OPT, null,	null,			null],
 ];
 check_fields($fields);
 
@@ -47,6 +59,48 @@ if (isset($_REQUEST['reconnect'])) {
 }
 
 $config = select_config();
+
+
+if ($config['authentication_type'] == ZBX_AUTH_SAML) {
+	if (isset($_REQUEST['sso_false'])) $_SESSION['sso_false'] = '';
+	if (!isset($_SESSION['sso_false'])){
+		
+		if (!empty($config['saml_idp_entity_id']) || !empty($config['saml_idp_single_sign_on_service']) || !empty($config['saml_idp_single_logout_service']) || !empty($config['saml_idp_certificate'])){
+			$auth = new OneLogin_Saml2_Auth($settingsInfo);
+			
+			if (array_key_exists('acs', $_REQUEST)){
+				if (isset($_SESSION) && isset($_SESSION['AuthNRequestID'])) {
+					$requestID = $_SESSION['AuthNRequestID'];
+				} else {
+					$requestID = null;
+				}
+				
+				$auth->processResponse($requestID);
+				
+				$errors = $auth->getErrors();
+				
+				if (!empty($errors)) {
+					echo '<p>',implode(', ', $errors),'</p>';
+				}
+				if (!$auth->isAuthenticated()) {
+					echo "<p>Not authenticated</p>";
+					exit();
+				}
+				$_REQUEST['enter'] = _('Sign in');
+				$_REQUEST['name'] = $auth->getNameId();
+				unset($_SESSION['AuthNRequestID']);
+			} else {
+				try {
+					$auth->login();
+				} catch (Exception $e) {
+					echo 'Caught Exception: ', $e->getMessage(), "\n";
+				}
+			}
+		} else {
+			$messages['message'] = "Missing required SAML fields.  Use internal Authentication to configure SAML.";
+		}
+	}
+}
 
 if ($config['authentication_type'] == ZBX_AUTH_HTTP) {
 	if (!empty($_SERVER['PHP_AUTH_USER'])) {
@@ -62,7 +116,8 @@ if ($config['authentication_type'] == ZBX_AUTH_HTTP) {
 if (isset($_REQUEST['enter']) && $_REQUEST['enter'] == _('Sign in')) {
 	// try to login
 	$autoLogin = getRequest('autologin', 0);
-
+	
+	
 	DBstart();
 	$loginSuccess = CWebUser::login(getRequest('name', ''), getRequest('password', ''));
 	DBend(true);
@@ -115,6 +170,11 @@ if (!CWebUser::$data['alias'] || CWebUser::$data['alias'] == ZBX_GUEST_USER) {
 			echo _('User name does not match with DB');
 			break;
 		case ZBX_AUTH_LDAP:
+		case ZBX_AUTH_SAML:
+			$_REQUEST['message'] = $messages['message'];
+			$loginForm = new CView('general.login');
+			$loginForm->render();
+			break;
 		case ZBX_AUTH_INTERNAL:
 			if (isset($_REQUEST['enter'])) {
 				$_REQUEST['autologin'] = getRequest('autologin', 0);

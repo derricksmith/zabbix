@@ -28,7 +28,7 @@ require_once dirname(__FILE__).'/include/page_header.php';
 
 //	VAR						TYPE	OPTIONAL	FLAGS	VALIDATION	EXCEPTION
 $fields = [
-	'config' =>			[T_ZBX_INT, O_OPT, null, IN(ZBX_AUTH_INTERNAL.','.ZBX_AUTH_LDAP.','.ZBX_AUTH_HTTP), null],
+	'config' =>			[T_ZBX_INT, O_OPT, null, IN(ZBX_AUTH_INTERNAL.','.ZBX_AUTH_LDAP.','.ZBX_AUTH_HTTP.','.ZBX_AUTH_SAML), null],
 	'form_refresh' =>	[T_ZBX_INT, O_OPT, null,			null, null],
 	// actions
 	'update' =>			[T_ZBX_STR, O_OPT, P_SYS|P_ACT,	null, null],
@@ -49,7 +49,16 @@ $fields = [
 		'isset({config}) && {config} == '.ZBX_AUTH_LDAP.' && (isset({update}) || isset({test}))'],
 	'user_password' =>	[T_ZBX_STR, O_OPT, null,			NOT_EMPTY,
 		'isset({config}) && {config} == '.ZBX_AUTH_LDAP.' && (isset({update}) || isset({test}))',	_('User password')],
-	'change_bind_password' => [T_ZBX_STR, O_OPT, null, null,	null]
+	'change_bind_password' => [T_ZBX_STR, O_OPT, null, null,	null],
+	// SAML
+	'saml_idp_entity_id' =>		[T_ZBX_STR, O_OPT, null, NOT_EMPTY,
+		'isset({config}) && {config} == '.ZBX_AUTH_SAML,	_('IdP Entity ID')],
+	'saml_idp_single_sign_on_service' =>		[T_ZBX_STR, O_OPT, null, NOT_EMPTY,
+		'isset({config}) && {config} == '.ZBX_AUTH_SAML,	_('IdP Single Sign On Service URL')],
+	'saml_idp_single_logout_service' =>		[T_ZBX_STR, O_OPT, null, NOT_EMPTY,
+		'isset({config}) && {config} == '.ZBX_AUTH_SAML,	_('IdP Single Logout Service URL')],
+	'saml_idp_certificate' =>		[T_ZBX_STR, O_OPT, null, NOT_EMPTY,
+		'isset({config}) && {config} == '.ZBX_AUTH_SAML,	_('IdP Certificate')],
 ];
 check_fields($fields);
 
@@ -70,7 +79,11 @@ $fields = [
 	'ldap_base_dn' => true,
 	'ldap_search_attribute' => true,
 	'ldap_bind_dn' => true,
-	'ldap_bind_password' => true
+	'ldap_bind_password' => true,
+	'saml_idp_entity_id' => true,
+	'saml_idp_single_sign_on_service' => true,
+	'saml_idp_single_logout_service' => true,
+	'saml_idp_certificate' => true,
 ];
 $ldap_extension_enabled = false;
 
@@ -226,6 +239,38 @@ elseif ($config['authentication_type'] == ZBX_AUTH_HTTP) {
 
 		$messageSuccess = _('Authentication method changed to HTTP');
 		$messageFailed = _('Cannot change authentication method to HTTP');
+
+		DBstart();
+
+		$result = update_config($config);
+
+		if ($result) {
+			// reset all sessions
+			if ($isAuthenticationTypeChanged) {
+				$query =
+					'UPDATE sessions SET status='.ZBX_SESSION_PASSIVE.
+					' WHERE sessionid<>'.zbx_dbstr(CWebUser::$data['sessionid']);
+				if ($internal_auth_users) {
+					$query .= ' AND '.dbConditionInt('userid', array_keys($internal_auth_users), true);
+				}
+				$result &= DBexecute($query);
+			}
+
+			$isAuthenticationTypeChanged = false;
+
+			add_audit(AUDIT_ACTION_UPDATE, AUDIT_RESOURCE_ZABBIX_CONFIG, $messageSuccess);
+		}
+
+		$result = DBend($result);
+		show_messages($result, $messageSuccess, $messageFailed);
+	}
+}
+elseif ($config['authentication_type'] == ZBX_AUTH_SAML) {
+	if (hasRequest('update')) {
+		
+
+		$messageSuccess = _('Authentication method changed to SAML');
+		$messageFailed = _('Cannot change authentication method to SAML');
 
 		DBstart();
 

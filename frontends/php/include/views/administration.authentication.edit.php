@@ -22,9 +22,7 @@
 $widget = (new CWidget())->setTitle(_('Authentication'));
 
 // create form
-$authenticationForm = (new CForm())
-	->setName('authenticationForm')
-	->setAttribute('aria-labeledby', ZBX_STYLE_PAGE_TITLE);
+$authenticationForm = (new CForm())->setName('authenticationForm');
 
 // create form list
 $authenticationFormList = new CFormList('authenticationList');
@@ -32,12 +30,11 @@ $authenticationFormList = new CFormList('authenticationList');
 // append config radio buttons to form list
 $authenticationFormList->addRow(_('Default authentication'),
 	(new CRadioButtonList('config', (int) $this->data['config']['authentication_type']))
-		->setAttribute('autofocus', 'autofocus')
 		->addValue(_x('Internal', 'authentication'), ZBX_AUTH_INTERNAL, null, 'submit()')
 		->addValue(_('LDAP'), ZBX_AUTH_LDAP, null, 'submit()')
 		->addValue(_('HTTP'), ZBX_AUTH_HTTP, null, 'submit()')
+		->addValue(_('SAML'), ZBX_AUTH_SAML, null, 'submit()')
 		->setModern(true)
-		->removeId()
 );
 
 // append LDAP fields to form list
@@ -55,10 +52,8 @@ if ($this->data['ldap_extension_enabled'] && $this->data['config']['authenticati
 	}
 
 	$authenticationFormList->addRow(
-		(new CLabel(_('LDAP host'), 'ldap_host'))->setAsteriskMark(),
-		(new CTextBox('ldap_host', $this->data['config']['ldap_host']))
-			->setWidth(ZBX_TEXTAREA_STANDARD_WIDTH)
-			->setAriaRequired()
+		_('LDAP host'),
+		(new CTextBox('ldap_host', $this->data['config']['ldap_host']))->setWidth(ZBX_TEXTAREA_STANDARD_WIDTH)
 	);
 	$authenticationFormList->addRow(
 		_('Port'),
@@ -66,13 +61,11 @@ if ($this->data['ldap_extension_enabled'] && $this->data['config']['authenticati
 			->setWidth(ZBX_TEXTAREA_NUMERIC_STANDARD_WIDTH)
 	);
 	$authenticationFormList->addRow(
-		(new CLabel(_('Base DN'), 'ldap_base_dn'))->setAsteriskMark(),
-		(new CTextBox('ldap_base_dn', $this->data['config']['ldap_base_dn']))
-			->setWidth(ZBX_TEXTAREA_STANDARD_WIDTH)
-			->setAriaRequired()
+		_('Base DN'),
+		(new CTextBox('ldap_base_dn', $this->data['config']['ldap_base_dn']))->setWidth(ZBX_TEXTAREA_STANDARD_WIDTH)
 	);
 	$authenticationFormList->addRow(
-		(new CLabel(_('Search attribute'), 'ldap_search_attribute'))->setAsteriskMark(),
+		_('Search attribute'),
 		(new CTextBox(
 			'ldap_search_attribute',
 			(zbx_empty($this->data['config']['ldap_search_attribute']) && $this->data['form_refresh'] == 0)
@@ -80,9 +73,7 @@ if ($this->data['ldap_extension_enabled'] && $this->data['config']['authenticati
 				: $this->data['config']['ldap_search_attribute'],
 			false,
 			128
-		))
-			->setWidth(ZBX_TEXTAREA_STANDARD_WIDTH)
-			->setAriaRequired()
+		))->setWidth(ZBX_TEXTAREA_STANDARD_WIDTH)
 	);
 	$authenticationFormList->addRow(
 		_('Bind DN'),
@@ -110,11 +101,27 @@ if ($this->data['ldap_extension_enabled'] && $this->data['config']['authenticati
 
 	$authenticationFormList->addRow(_('Test authentication'), ' ['._('must be a valid LDAP user').']');
 	$authenticationFormList->addRow(_('Login'), $userComboBox);
-	$authenticationFormList->addRow((new CLabel(_('User password'), 'user_password'))->setAsteriskMark(),
-		(new CPassBox('user_password'))
-			->setWidth(ZBX_TEXTAREA_SMALL_WIDTH)
-			->setAriaRequired()
+	$authenticationFormList->addRow(_('User password'), (new CPassBox('user_password'))->setWidth(ZBX_TEXTAREA_SMALL_WIDTH));
+}
+
+if ($this->data['config']['authentication_type'] == ZBX_AUTH_SAML) {
+	$authenticationFormList->addRow(
+		_('IdP Entity ID'),
+		(new CTextBox('saml_idp_entity_id', isset($this->data['config']['saml_idp_entity_id']) ? $this->data['config']['saml_idp_entity_id'] : ""))->setWidth(ZBX_TEXTAREA_STANDARD_WIDTH)
 	);
+	$authenticationFormList->addRow(
+		_('IdP Single Sign On Service URL'),
+		(new CTextBox('saml_idp_single_sign_on_service', isset($this->data['config']['saml_idp_single_sign_on_service']) ? $this->data['config']['saml_idp_single_sign_on_service'] : ""))->setWidth(ZBX_TEXTAREA_STANDARD_WIDTH)
+	);
+	$authenticationFormList->addRow(
+		_('IdP Single Logout Service URL'),
+		(new CTextBox('saml_idp_single_logout_service', isset($this->data['config']['saml_idp_single_logout_service']) ? $this->data['config']['saml_idp_single_logout_service'] : ""))->setWidth(ZBX_TEXTAREA_STANDARD_WIDTH)
+	);
+	$authenticationFormList->addRow(
+		_('IdP Certificate'),
+		(new CTextArea('saml_idp_certificate', isset($this->data['config']['saml_idp_certificate']) ? $this->data['config']['saml_idp_certificate'] : ""))->setWidth(ZBX_TEXTAREA_STANDARD_WIDTH)
+	);
+	
 }
 
 // append form list to tab
@@ -129,13 +136,12 @@ if ($this->data['is_authentication_type_changed']) {
 		'jQuery("#authenticationForm").submit(); return true; } else { return false; }'
 	);
 }
-elseif ($this->data['config']['authentication_type'] != ZBX_AUTH_LDAP) {
+elseif ($this->data['config']['authentication_type'] != ZBX_AUTH_LDAP && $this->data['config']['authentication_type'] != ZBX_AUTH_SAML) {
 	$saveButton->setAttribute('disabled', 'true');
 }
 
 // LDAP test button.
 $test_button = new CSubmit('test', _('Test'));
-
 if ($data['config']['authentication_type'] == ZBX_AUTH_LDAP) {
 	$test_button->setEnabled($data['ldap_extension_enabled']);
 	$saveButton->setEnabled($data['ldap_extension_enabled']);
